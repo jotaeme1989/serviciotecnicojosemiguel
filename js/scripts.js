@@ -1,247 +1,201 @@
-const confirmarEntregaBtn = document.getElementById('confirmarEntrega');
-        const entregaConfirmadaInput = document.getElementById('entregaConfirmada');
-        const ingresoEquipoForm = document.getElementById('ingresoEquipoForm');
-        const submitButton = document.getElementById('submitButton');
-        const photoPreviewContainer = document.getElementById('photo-preview-container');
-        const photoInputs = document.querySelectorAll('input[type="file"][name="fotos_equipo[]"]');
-        const pdfContent = document.getElementById('pdf-content'); // El contenedor principal para el PDF
+// Esperar a que el DOM esté completamente cargado
+document.addEventListener('DOMContentLoaded', () => {
+    // Referencias a elementos del DOM
+    const form = document.getElementById('ingresoEquipoForm');
+    const pdfContent = document.getElementById('pdf-content'); // Contenido para el PDF
+    const photoInputs = document.querySelectorAll('input[type="file"][name="fotos_equipo[]"]');
+    const photoPreviewContainer = document.getElementById('photo-preview-container');
+    const confirmarEntregaButton = document.getElementById('confirmarEntrega');
+    const entregaConfirmadaInput = document.getElementById('entregaConfirmada');
+    const submitButton = document.getElementById('submitButton');
 
-        confirmarEntregaBtn.addEventListener('click', () => {
-            if (confirm('¿Confirma que ha revisado el equipo con el cliente y que la información es correcta?')) {
-                entregaConfirmadaInput.value = 'true';
-                confirmarEntregaBtn.textContent = 'Entrega Confirmada ✔️';
-                confirmarEntregaBtn.style.backgroundColor = '#28a745'; // Color verde
-                confirmarEntregaBtn.disabled = true; // Deshabilita el botón después de confirmar
+    // --- Configuración del Backend ---
+    // IMPORTANTE: Asegúrate de que esta URL coincida con la dirección donde tu servidor Node.js está corriendo.
+    // Si lo estás probando localmente, será http://localhost:3000.
+    // Cuando lo despliegues a un servidor real, cambia esta URL.
+    const BACKEND_URL = 'http://localhost:3000/api/ingreso'; // ¡CUIDADO! Cambia esto para producción si tu backend no está local.
+
+    // --- Funcionalidad de Previsualización de Fotos ---
+    photoInputs.forEach(input => {
+        input.addEventListener('change', function() {
+            // Eliminar previsualizaciones anteriores para este input
+            const existingPreview = photoPreviewContainer.querySelector(`[data-for="${this.id}"]`);
+            if (existingPreview) {
+                existingPreview.remove();
+            }
+
+            if (this.files && this.files[0]) {
+                const reader = new FileReader();
+                const currentInputId = this.id; // Captura el ID actual para el contexto del reader
+
+                reader.onload = function(e) {
+                    // Crea un contenedor para la imagen y su etiqueta
+                    const previewWrapper = document.createElement('div');
+                    previewWrapper.classList.add('photo-preview-item');
+                    previewWrapper.setAttribute('data-for', currentInputId); // Asocia la previsualización al input
+
+                    // Crea la imagen
+                    const img = document.createElement('img');
+                    img.src = e.target.result;
+                    img.alt = `Previsualización de ${currentInputId}`;
+                    img.style.maxWidth = '100px'; // Ajusta el tamaño de la previsualización
+                    img.style.maxHeight = '100px';
+                    img.style.objectFit = 'cover';
+                    img.style.marginRight = '10px';
+
+                    // Crea la etiqueta (puedes ajustar el texto si es necesario)
+                    const labelText = document.querySelector(`label[for="${currentInputId}"]`).textContent;
+                    const labelSpan = document.createElement('span');
+                    labelSpan.textContent = `${labelText}:`;
+
+                    // Añade al contenedor
+                    previewWrapper.appendChild(labelSpan);
+                    previewWrapper.appendChild(img);
+                    photoPreviewContainer.appendChild(previewWrapper);
+                };
+                reader.readAsDataURL(this.files[0]);
             }
         });
+    });
 
-        // Este array guardará las promesas de carga de cada imagen
-        const loadedImagePromises = [];
-
-        // Event listener para cada input de foto para previsualizar la imagen
-        photoInputs.forEach(input => {
-            input.addEventListener('change', (event) => {
-                const file = event.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        const imgId = input.id;
-                        let existingPreview = document.getElementById(`preview-${imgId}`);
-
-                        if (existingPreview) {
-                            existingPreview.querySelector('img').src = e.target.result;
-                            // Si la imagen ya existía, volvemos a asegurar su carga
-                            const imgElem = existingPreview.querySelector('img');
-                            const promise = new Promise(resolve => {
-                                imgElem.onload = resolve;
-                                imgElem.onerror = resolve;
-                            });
-                            // Reemplazamos la promesa antigua si el input fue actualizado
-                            const index = loadedImagePromises.findIndex(p => p.id === imgId);
-                            if (index !== -1) {
-                                loadedImagePromises[index] = { id: imgId, promise: promise };
-                            } else {
-                                loadedImagePromises.push({ id: imgId, promise: promise });
-                            }
-
-                        } else {
-                            const previewItem = document.createElement('div');
-                            previewItem.classList.add('photo-preview-item');
-                            previewItem.id = `preview-${imgId}`;
-
-                            const img = document.createElement('img');
-                            img.src = e.target.result;
-                            img.alt = `Foto de ${input.labels[0].textContent}`;
-                            
-                            // *** Importante: Añadir promesa de carga al array ***
-                            const promise = new Promise(resolve => {
-                                img.onload = resolve;
-                                img.onerror = resolve; // Para que no se quede colgado si una imagen falla
-                            });
-                            loadedImagePromises.push({ id: imgId, promise: promise });
-
-                            const caption = document.createElement('span');
-                            caption.textContent = input.labels[0].textContent;
-
-                            const removeBtn = document.createElement('button');
-                            removeBtn.classList.add('remove-photo-btn');
-                            removeBtn.textContent = 'X';
-                            removeBtn.onclick = () => {
-                                previewItem.remove();
-                                input.value = ''; // Limpiar el input file
-                                // Eliminar la promesa correspondiente al input removido
-                                const index = loadedImagePromises.findIndex(p => p.id === imgId);
-                                if (index !== -1) {
-                                    loadedImagePromises.splice(index, 1);
-                                }
-                            };
-
-                            previewItem.appendChild(img);
-                            previewItem.appendChild(caption);
-                            previewItem.appendChild(removeBtn);
-                            photoPreviewContainer.appendChild(previewItem);
-                        }
-                    };
-                    reader.readAsDataURL(file);
-                } else {
-                    const existingPreview = document.getElementById(`preview-${input.id}`);
-                    if (existingPreview) {
-                        existingPreview.remove();
-                    }
-                    // Eliminar la promesa si el input se vacía
-                    const index = loadedImagePromises.findIndex(p => p.id === input.id);
-                    if (index !== -1) {
-                        loadedImagePromises.splice(index, 1);
-                    }
-                }
-            });
-        });
-
-
-        ingresoEquipoForm.addEventListener('submit', async function(event) {
-            event.preventDefault(); // Evita que el formulario se envíe de la forma tradicional
-
-            if (entregaConfirmadaInput.value !== 'true') {
-                alert('Por favor, presione el botón "Confirmo Entrega del Equipo" para continuar.');
-                return; // Detener el envío si no se ha confirmado
-            }
-            
-            // Validar campos obligatorios
-            const requiredFields = document.querySelectorAll('#ingresoEquipoForm [required]');
-            for (const field of requiredFields) {
-                if (field.type === 'file' && field.hasAttribute('required')) {
-                    if (field.files.length === 0 && !document.getElementById(`preview-${field.id}`)) {
-                        alert(`Por favor, cargue la foto: ${field.labels[0].textContent}`);
-                        field.focus();
-                        return;
-                    }
-                } else if (!field.value.trim() && field.type !== 'checkbox') {
-                    alert(`Por favor, complete el campo: ${field.previousElementSibling ? field.previousElementSibling.textContent.replace(':', '') : field.placeholder || field.id}`);
-                    field.focus();
-                    return;
-                } else if (field.type === 'checkbox' && !field.checked) {
-                    alert('Debe aceptar los Términos y Condiciones.');
-                    field.focus();
-                    return;
-                }
-            }
-
-            submitButton.disabled = true;
-            submitButton.textContent = 'Generando PDF... Esto puede tomar un momento...';
-
-            const { jsPDF } = window.jspdf;
-
-            const doc = new jsPDF('p', 'pt', 'letter');
-
-            const nombreClienteParaTitulo = document.getElementById('nombre').value.trim();
-            const fechaHoraIngreso = new Date().toLocaleString('es-CL', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-
-            doc.setFontSize(22);
-            doc.text(`Comprobante de Ingreso de Equipo`, doc.internal.pageSize.width / 2, 60, { align: 'center' });
-            doc.setFontSize(12);
-            doc.text(`Cliente: ${nombreClienteParaTitulo}`, doc.internal.pageSize.width / 2, 85, { align: 'center' });
-            doc.text(`Fecha y Hora de Ingreso: ${fechaHoraIngreso}`, doc.internal.pageSize.width / 2, 105, { align: 'center' });
-            doc.setFontSize(10);
-            doc.text(`Servicio Técnico Computacional José Miguel`, doc.internal.pageSize.width / 2, 125, { align: 'center' });
-            doc.text(`Contacto: [Tu Teléfono] | [Tu Correo] | Dirección: [Tu Dirección Completa, Conchalí, Santiago]`, doc.internal.pageSize.width / 2, 140, { align: 'center' });
-
-            // --- INICIO DE LA LÓGICA DE CAPTURA MEJORADA Y MÁS ROBUSTA ---
-            document.body.classList.add('hide-for-pdf');
-
-            // 1. Esperar explícitamente a que TODAS las imágenes de previsualización carguen
-            // Obtenemos solo las promesas, no los objetos completos
-            const activeImagePromises = loadedImagePromises.map(item => item.promise);
-            await Promise.all(activeImagePromises).catch(e => console.error("Error al cargar imágenes:", e));
-            
-            // 2. Pequeña demora adicional (buffer) para renderizado
-            await new Promise(resolve => setTimeout(resolve, 500)); // Aumentado a 500ms
-
-            // 3. Captura del contenido con html2canvas
-            const canvas = await html2canvas(pdfContent, { 
-                scale: 1.5, // Reducido a 1.5 para mejor rendimiento en móviles (prueba con 1.0 si sigue fallando)
-                useCORS: true, 
-                allowTaint: true, 
-                scrollY: -window.scrollY, 
-                windowWidth: document.documentElement.offsetWidth, 
-                windowHeight: document.documentElement.offsetHeight,
-                logging: true // Activar logging para ver posibles errores en la consola
-            });
-
-            document.body.classList.remove('hide-for-pdf');
-            // --- FIN DE LA LÓGICA DE CAPTURA MEJORADA ---
-
-            const imgData = canvas.toDataURL('image/jpeg', 0.9); // Calidad 0.9 para JPEG
-
-            const pdfPageWidth = doc.internal.pageSize.getWidth();
-            const pdfPageHeight = doc.internal.pageSize.getHeight();
-            const margin = 40; 
-            const contentWidth = pdfPageWidth - (2 * margin);
-
-            let imgWidth = contentWidth; 
-            let imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-            let position = 160; 
-
-            let heightLeft = imgHeight;
-            let currentCanvasY = 0; // Posición Y en el canvas original para recortar
-
-            while (heightLeft > 0) {
-                // Si la imagen es demasiado grande para la primera página con el encabezado O es una nueva página
-                if (position === margin && currentCanvasY === 0 && imgHeight > (pdfPageHeight - position - margin)) {
-                    // Es la primera página y no cabe completamente con el encabezado. Se manejará en el bucle.
-                } else if (position !== margin || currentCanvasY > 0) { // Si ya estamos más allá del encabezado o ya hemos procesado parte del canvas
-                    doc.addPage();
-                    position = margin; // Reinicia la posición para la nueva página
-                }
-
-                let currentSliceHeight = pdfPageHeight - position - margin;
-                if (currentSliceHeight > heightLeft) {
-                    currentSliceHeight = heightLeft;
-                }
-                
-                // Recortar la imagen del canvas para la página actual
-                // Asegúrate de que el recorte sea dentro de los límites del canvas
-                const sliceCanvasHeight = (currentSliceHeight * canvas.width) / imgWidth;
-                const sliceCanvasY = currentCanvasY;
-
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = canvas.width; // Ancho completo del canvas original
-                tempCanvas.height = sliceCanvasHeight; // Solo la altura del slice
-
-                const tempCtx = tempCanvas.getContext('2d');
-                tempCtx.drawImage(canvas, 
-                                  0, sliceCanvasY, canvas.width, sliceCanvasHeight, // Source (recorte del canvas original)
-                                  0, 0, tempCanvas.width, tempCanvas.height); // Destination (copiar al tempCanvas)
-
-                const tempImgData = tempCanvas.toDataURL('image/jpeg', 0.9);
-
-                doc.addImage(tempImgData, 'JPEG', margin, position, imgWidth, currentSliceHeight);
-                
-                heightLeft -= currentSliceHeight;
-                currentCanvasY += sliceCanvasHeight; 
-                position += currentSliceHeight; // Actualiza la posición en la página actual
-            }
-
-            // Generar un nombre de archivo
-            const nombreClienteSlug = nombreClienteParaTitulo.replace(/\s+/g, '_').toLowerCase();
-            const fechaArchivo = new Date().toLocaleDateString('es-CL', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '');
-            const filename = `Comprobante_Ingreso_${nombreClienteSlug}_${fechaArchivo}.pdf`;
-
-            doc.save(filename);
-
-            alert('¡Comprobante PDF generado y descargado! Puedes enviarlo por WhatsApp.');
-
-            // Limpiar el formulario para el siguiente ingreso
-            ingresoEquipoForm.reset();
-            photoPreviewContainer.innerHTML = ''; // Limpiar las previsualizaciones
-            // También limpiar el array de promesas
-            loadedImagePromises.length = 0; 
-
+    // --- Funcionalidad del Botón "Confirmo Entrega del Equipo" ---
+    confirmarEntregaButton.addEventListener('click', () => {
+        const isConfirmed = confirm('¿Está seguro de confirmar la entrega del equipo? Esta acción no se puede deshacer una vez enviado el formulario.');
+        if (isConfirmed) {
+            entregaConfirmadaInput.value = 'true';
+            confirmarEntregaButton.textContent = 'Entrega Confirmada ✅';
+            confirmarEntregaButton.disabled = true;
+            submitButton.disabled = false; // Habilitar el botón de envío
+            alert('Entrega confirmada. Ahora puede generar el comprobante PDF.');
+        } else {
             entregaConfirmadaInput.value = 'false';
-            confirmarEntregaBtn.textContent = 'Confirmo Entrega del Equipo';
-            confirmarEntregaBtn.style.backgroundColor = '#007bff';
-            confirmarEntregaBtn.disabled = false;
+            submitButton.disabled = true; // Mantener deshabilitado si no se confirma
+        }
+    });
 
-            submitButton.disabled = false;
+    // Deshabilitar botón de envío al cargar la página
+    submitButton.disabled = true;
+
+    // --- Manejo del Envío del Formulario (Ahora envía al Backend) ---
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault(); // Evitar el envío tradicional del formulario
+
+        // Asegurarse de que la confirmación de entrega se haya realizado
+        if (entregaConfirmadaInput.value !== 'true') {
+            alert('Por favor, confirme la entrega del equipo antes de generar el comprobante.');
+            return;
+        }
+
+        // Deshabilitar el botón para evitar envíos duplicados
+        submitButton.disabled = true;
+        submitButton.textContent = 'Enviando...';
+
+        // Crear un objeto FormData para enviar todos los datos del formulario, incluyendo los archivos
+        const formData = new FormData(form);
+
+        // Debug: Mostrar FormData en consola (solo para desarrollo)
+        // for (let pair of formData.entries()) {
+        //     console.log(pair[0] + ': ' + pair[1]);
+        // }
+
+        try {
+            // Enviar los datos del formulario al backend
+            const response = await fetch(BACKEND_URL, {
+                method: 'POST',
+                body: formData // FormData se envía directamente, sin Content-Type manual
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                // Si la respuesta es exitosa (código 2xx)
+                alert(`¡Éxito! El equipo ha sido ingresado. Número de seguimiento: ${result.numero_seguimiento}`);
+                
+                // --- Generar PDF con el Número de Seguimiento (¡Aquí es donde se integra!) ---
+                const numeroSeguimientoDisplay = document.createElement('p');
+                numeroSeguimientoDisplay.innerHTML = `<strong>Número de Seguimiento: ${result.numero_seguimiento}</strong>`;
+                numeroSeguimientoDisplay.style.fontSize = '1.2em';
+                numeroSeguimientoDisplay.style.textAlign = 'center';
+                numeroSeguimientoDisplay.style.marginTop = '20px';
+                numeroSeguimientoDisplay.style.marginBottom = '20px';
+                numeroSeguimientoDisplay.style.padding = '10px';
+                numeroSeguimientoDisplay.style.border = '2px solid #4CAF50';
+                numeroSeguimientoDisplay.style.borderRadius = '8px';
+                numeroSeguimientoDisplay.style.backgroundColor = '#e6ffe6';
+
+                // Insertar el número de seguimiento al principio del contenido del PDF
+                pdfContent.insertBefore(numeroSeguimientoDisplay, pdfContent.firstChild);
+                
+                // Ahora, generar el PDF como antes, pero con el número de seguimiento incluido
+                await new Promise(resolve => setTimeout(resolve, 500)); // Pequeña espera para asegurar que el DOM se actualice
+
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF('p', 'mm', 'a4'); // 'p' para portrait, 'mm' para milímetros, 'a4' tamaño de página
+
+                html2canvas(pdfContent, {
+                    scale: 1.0, // Reducir escala para mejor rendimiento y menor uso de memoria en móviles
+                    useCORS: true,
+                    allowTaint: true,
+                    scrollY: -window.scrollY, // Corregir el scroll para html2canvas
+                    windowWidth: document.documentElement.offsetWidth, // Capturar el ancho total
+                    windowHeight: document.documentElement.offsetHeight, // Capturar el alto total
+                    logging: true // Habilitar logging para depuración
+                }).then(canvas => {
+                    const imgData = canvas.toDataURL('image/png');
+                    const imgWidth = 210; // Ancho A4 en mm
+                    const pageHeight = 297; // Alto A4 en mm
+                    const imgHeight = canvas.height * imgWidth / canvas.width;
+                    let heightLeft = imgHeight;
+                    let position = 0;
+
+                    doc.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                    heightLeft -= pageHeight;
+
+                    while (heightLeft >= 0) {
+                        position = heightLeft - imgHeight;
+                        doc.addPage();
+                        doc.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                        heightLeft -= pageHeight;
+                    }
+
+                    // Obtener la fecha actual para el nombre del archivo
+                    const today = new Date();
+                    const dd = String(today.getDate()).padStart(2, '0');
+                    const mm = String(today.getMonth() + 1).padStart(2, '0'); // Enero es 0
+                    const yyyy = today.getFullYear();
+                    const fechaFormato = `${dd}-${mm}-${yyyy}`;
+
+                    // Nombre del archivo PDF
+                    const filename = `Comprobante_Ingreso_${result.numero_seguimiento}_${fechaFormato}.pdf`;
+                    doc.save(filename);
+
+                    // Eliminar el número de seguimiento temporal del DOM después de generar el PDF
+                    if (numeroSeguimientoDisplay.parentNode) {
+                        numeroSeguimientoDisplay.parentNode.removeChild(numeroSeguimientoDisplay);
+                    }
+
+                    // Resetear el formulario y habilitar el botón
+                    form.reset();
+                    photoPreviewContainer.innerHTML = ''; // Limpiar previsualizaciones
+                    entregaConfirmadaInput.value = 'false';
+                    confirmarEntregaButton.textContent = 'Confirmo Entrega del Equipo';
+                    confirmarEntregaButton.disabled = false;
+                    submitButton.textContent = 'Generar Comprobante PDF';
+                    submitButton.disabled = true; // Se deshabilita hasta nueva confirmación
+                });
+
+            } else {
+                // Si la respuesta no es exitosa (código 4xx o 5xx)
+                alert(`Error al guardar los datos: ${result.message || 'Error desconocido'}`);
+                console.error('Error del servidor:', result.error);
+                submitButton.textContent = 'Generar Comprobante PDF';
+                submitButton.disabled = false; // Re-habilitar el botón en caso de error
+            }
+        } catch (error) {
+            console.error('Error de red o en la petición:', error);
+            alert('Error de conexión con el servidor. Por favor, intente de nuevo.');
             submitButton.textContent = 'Generar Comprobante PDF';
-        });
+            submitButton.disabled = false; // Re-habilitar el botón en caso de error
+        }
+    });
+});
